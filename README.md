@@ -7,11 +7,16 @@ After setting up the project folder on github...
 
 On client:
 
-  mkdir my_project
-  cd my_project
-  touch .gitignore
-  git init
-  git add .
-  git commit -m "Initial commit"
-  git remote add origin https://github.com/JPitty/path/to/my_project.git
-  git push --set-upstream origin master
+* mkdir my_project
+* cd my_project
+* touch .gitignore
+* git init
+* git add .
+* git commit -m "Initial commit"
+* git remote add origin https://github.com/JPitty/path/to/my_project.git
+* git push --set-upstream origin master
+
+To commit all:
+
+* git commit -a -m "message..."
+* git push 
