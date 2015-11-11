@@ -1,7 +1,7 @@
 # teensy_stepper
 misc Teensy 3.2 stepper motor code
 
-Because I can't remember how to start a new repository:
+**Because I can't remember how to start a new repository:**
 
 After setting up the project folder on github...
 

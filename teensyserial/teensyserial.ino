@@ -20,7 +20,6 @@ int debug = 1;
 
 int stepSpeed = 350; //delay in microsec.
 int stepSpeedt = stepSpeed;
-int stepRampup = 0;
 int totSteps = 0;
 int stepCount = 0;
 int runto=0;
@@ -29,11 +28,13 @@ int runtime=0;
 int steps=0;
 boolean setdir, dir, setspd, setrt, setmode, setcont;
 unsigned long time, dur;
-int stepRampup = (400-stepSpeed)/100;
+//int stepRampup = 0;
+int stepRampup = (400-stepSpeed)/100;  //FIX: fraction conflicts with int and neg. breaks it
 
-enum stepsetting {
-1,2,4,8,16,32,64,128
-};  //usage: stepsetting variable = <value>
+//Should this be used?
+//enum stepsetting {
+//1,2,4,8,16,32,64,128
+//}  //usage: stepsetting variable = <value>
 
 void setup() {
   SPI.begin();
@@ -43,9 +44,10 @@ void setup() {
   delay(1);
   
   stepper.resetSettings();
-  stepper.setCurrentMilliamps(1500);
-  stepper.setStepMode(4); //1,2,4,8,16,32,64,128... ENUM?
-  stepper.enableDriver();
+  stepper.setCurrentMilliamps(1200); //should be adj live
+  stepper.setStepMode(4); //ENUM?
+  stepper.setDirection(1);
+  stepper.enableDriver();  //should enable and disable as needed
   
   Serial.begin(9600);
   Serial.println("Hello Teensy 3.1 Serial");
@@ -56,12 +58,13 @@ void setup() {
 void loop() {  
   //read the new Serial command
   if (Serial.available()) {
+    //reset values for a fresh cmd
     runto = 0;
     setspd = false;
     setrt = false;
     setdir = false;
     setmode = false;
-	//setpwr = false;  ADD BELOW to set motor current with stepper.setCurrentMilliamps()
+	  setpwr = false;  ADD BELOW to set motor current with stepper.setCurrentMilliamps()
     while (Serial.available()) {
       char c = Serial.read();
       if (c == 'd') { //set direction
@@ -74,11 +77,12 @@ void loop() {
         setmode = true;
       } else if (c == 'x') { //'x' to set cont run
         setcont = true;
+      } else if (c == 'p') { //'p' to set mA
+        setpwr = true;  
       } else {
         if (c >= '0' && c <= '9') {
           runto = (10 * runto) + (c - '0') ; // convert string of digits to a number
-        }
-    }}
+        }}}
     
     if (setspd){
       stepSpeed = runto;
@@ -92,13 +96,14 @@ void loop() {
       } else {
         dir = true;
       }
-	  delayMicroseconds(1);
+	    delayMicroseconds(1);
       stepper.setDirection(dir);
       delayMicroseconds(1);
       newcmd=3;
     } else if (setmode) {
-        if (runto > 0 ) {  //TODO: check for valid setting, should this be an ENUM?
-          stepper.setStepMode(runto);
+        steps=runto;
+        if (steps > 0 ) {  //TODO: check for valid setting, should this be an ENUM?
+          stepper.setStepMode(steps);
         } else {
           stepper.setStepMode(4); //default
         }
@@ -109,107 +114,95 @@ void loop() {
       totSteps = runto;
       newcmd=1;
     }
-  }
-  
-  //move number of steps
-  if (newcmd==1) { 
-    Serial.print("moving: ");
-    Serial.println(runto);
-    digitalWrite(11,HIGH);
-    digitalWrite(10,LOW);
-    stepCount = 0;
-    stepSpeedt=400;
-	
-    //ramp-up
-    while (stepCount < totSteps){
-      if (stepSpeed < 350 && stepSpeedt > stepSpeed){ 
-        stepSpeedt=400-stepCount*stepRampup;
-      } else {
-        stepSpeedt = stepSpeed;
+  } //end of Serial.Available
+
+  if (newcmd>0) { //skip if no new cmd
+    //move number of steps
+    if (newcmd==1) { 
+      Serial.print("moving #steps: ");
+      Serial.println(runto);
+      stepCount = 0;
+      stepSpeedt=400;
+  	
+      //ramp-up FIX: this should be moved to step fxn, values aren't right
+      while (stepCount < totSteps){
+        if (stepSpeed < 350 && stepSpeedt > stepSpeed){ 
+          stepSpeedt=400-stepCount*stepRampup;
+        } else {
+          stepSpeedt = stepSpeed;
+        }
+  	  
+        step(stepSpeedt);
+  	    stepCount++;
+        //check serial to interupt
+        if (Serial.available()) {
+          Serial.flush();
+          Serial.println("interrupted by serial line");
+          break;
+        }
       }
-	  
-      step(stepSpeedt);
-	  stepCount++;
-      if (Serial.available()) {
-        Serial.flush();
-        Serial.println("interrupted by serial line");
-        break;
-      }
-    }
-    delay(50);
-    Serial.print("new pos: ");
-    Serial.println(totSteps);
-	
-    //move for a duration
-  } else if (newcmd==2) {  
-    digitalWrite(10,LOW);
-    time = millis();
-    Serial.print("Time: ");
-    Serial.println(time);
-    dur = time + runtime;
-    stepCount = 0;
-    stepSpeedt=400;
-    while (time < dur) {
-      if (stepSpeed < 350 && stepSpeedt > stepSpeed){ //ramp-up
-        stepSpeedt=400-stepCount*stepRampup;
-        stepCount++;
-      } else {
-        stepSpeedt = stepSpeed;
-      }
-      digitalWrite(0,HIGH);
-      delayMicroseconds(stepSpeedt);
-      digitalWrite(0,LOW);
-      delayMicroseconds(stepSpeedt); 
+      delay(50);
+      Serial.print("new pos: ");
+      Serial.println(totSteps);
+  	
+      //move for a duration
+    } else if (newcmd==2) {  
       time = millis();
-      if (Serial.available()) {
-        Serial.flush();
-        Serial.println("interrupted by serial line");
-        break;
-      }
-    }
-    Serial.print("Time: ");
-    time = millis();
-    Serial.println(time);
-    delay(250);
-    digitalWrite(10,HIGH);
-    
-  } else if (newcmd==3) { //set direction
-      digitalWrite(1,dir);
-      Serial.print("direction: ");
-      Serial.println(dir);
-  } else if (newcmd==4) {
-      Serial.print("new speed: ");
-      Serial.println(stepSpeed);
-  } else if (newcmd==5) {
-      Serial.print("micro step div: ");
-      Serial.println(steps);
-  } else if (newcmd==6) {
-      Serial.println("running continous");
-      digitalWrite(11,HIGH);
-      digitalWrite(10,LOW);
-      while (1) {
+      Serial.print("Time: ");
+      Serial.println(time);
+      dur = time + runtime;
+      stepCount = 0;
+      stepSpeedt=400;
+      while (time < dur) {
         if (stepSpeed < 350 && stepSpeedt > stepSpeed){ //ramp-up
           stepSpeedt=400-stepCount*stepRampup;
           stepCount++;
         } else {
           stepSpeedt = stepSpeed;
         }
-        digitalWrite(0,HIGH);
-        delay(50);
-        digitalWrite(0,LOW);
-        delay(50);
+        step(stepSpeedt);
+        time = millis();
+        //check serial to interupt
         if (Serial.available()) {
           Serial.flush();
           Serial.println("interrupted by serial line");
-          setcont = false;
-          digitalWrite(10,HIGH);
-          digitalWrite(11,LOW);
           break;
         }
       }
-  }
-  newcmd=0;
-}
+      Serial.print("Time: ");
+      time = millis();
+      Serial.println(time);
+      delay(50);
+      
+    } else if (newcmd==3) {
+        Serial.print("direction: ");
+        Serial.println(dir);
+    } else if (newcmd==4) {
+        Serial.print("new speed: ");
+        Serial.println(stepSpeed);
+    } else if (newcmd==5) {
+        Serial.print("micro step div: ");
+        Serial.println(steps);
+    } else if (newcmd==6) {
+        Serial.println("running continous");
+        while (1) {
+          if (stepSpeed < 350 && stepSpeedt > stepSpeed){ //ramp-up
+            stepSpeedt=400-stepCount*stepRampup;
+            stepCount++;
+          } else {
+            stepSpeedt = stepSpeed;
+          }
+          step(stepSpeedt);
+          if (Serial.available()) {
+            Serial.flush();
+            Serial.println("interrupted by serial line");
+            setcont = false;
+            break;
+          }
+        }
+    }}
+  newcmd=0; //resets the serial cmd
+} //end of loop
 
 // Sends a pulse on the NXT/STEP pin to tell the driver to take
 // one step, and also delays to control the speed of the motor.
@@ -219,13 +212,9 @@ void step(int speedDelay)
   digitalWrite(stepPin, HIGH);
   delayMicroseconds(3);
   digitalWrite(stepPin, LOW);
-  delayMicroseconds(3);
 
-  // The delay here controls the stepper motor's speed.  You can
-  // increase the delay to make the stepper motor go slower.  If
-  // you decrease the delay, the stepper motor will go fast, but
-  // there is a limit to how fast it can go before it starts
-  // missing steps.
-  //REPLACE so this isn't blocking:
+  // This delay controls the stepper motor's speed.
+  // increase = stepper motor goes slower, decrease = faster, but
+  // there is a limit to how fast it can go before it starts missing steps.
   delayMicroseconds(speedDelay);
 }
