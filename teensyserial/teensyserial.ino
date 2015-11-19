@@ -20,6 +20,8 @@ int debug = 1;
 
 int stepSpeed = 350; //delay in microsec.
 int stepSpeedt = stepSpeed;
+//int stepRampup = 0;
+int stepRampup = (400-stepSpeed)/100;  //FIX: fraction conflicts with int and neg. breaks it
 int totSteps = 0;
 int stepCount = 0;
 int runto=0;
@@ -28,8 +30,6 @@ int runtime=0;
 int steps=0;
 boolean setdir, dir, setspd, setrt, setmode, setcont;
 unsigned long time, dur;
-//int stepRampup = 0;
-int stepRampup = (400-stepSpeed)/100;  //FIX: fraction conflicts with int and neg. breaks it
 
 //Should this be used?
 //enum stepsetting {
@@ -110,6 +110,13 @@ void loop() {
       newcmd=5;
     } else if (setcont) {
       newcmd=6;
+    } else if (setpwr) {
+      if (runto > 200 && runto < 2500) {
+        delayMicroseconds(1);
+        stepper.setCurrentMilliamps(runto);
+        delayMicroseconds(1);  
+      }
+      newcmd = 7;
     } else {
       totSteps = runto;
       newcmd=1;
