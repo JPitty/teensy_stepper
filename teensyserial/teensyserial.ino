@@ -18,17 +18,18 @@ const uint8_t ss = 10;  //slave select
 AMIS30543 stepper;
 int debug = 1;
 
+//these should be global?
 int stepSpeed = 350; //delay in microsec.
 int stepSpeedt = stepSpeed;
-//int stepRampup = 0;
-int stepRampup = (400-stepSpeed)/100;  //FIX: fraction conflicts with int and neg. breaks it
+int stepRampup = 4;
+//int stepRampup = (400-stepSpeed)/100;  //FIX: fraction conflicts with int and neg. breaks it
 int totSteps = 0;
 int stepCount = 0;
 int runto=0;
 int newcmd=0;
 int runtime=0;
 int steps=0;
-boolean setdir, dir, setspd, setrt, setmode, setcont;
+boolean setdir, dir, setspd, setrt, setmode, setcont, setpwr;
 unsigned long time, dur;
 
 //Should this be used?
@@ -64,7 +65,7 @@ void loop() {
     setrt = false;
     setdir = false;
     setmode = false;
-	  setpwr = false;  ADD BELOW to set motor current with stepper.setCurrentMilliamps()
+	  setpwr = false;  //ADD BELOW to set motor current with stepper.setCurrentMilliamps()
     while (Serial.available()) {
       char c = Serial.read();
       if (c == 'd') { //set direction
@@ -130,15 +131,16 @@ void loop() {
       Serial.println(runto);
       stepCount = 0;
       stepSpeedt=400;
-  	
+  	  stepper.enableDriver();
+     
       //ramp-up FIX: this should be moved to step fxn, values aren't right
       while (stepCount < totSteps){
         if (stepSpeed < 350 && stepSpeedt > stepSpeed){ 
-          stepSpeedt=400-stepCount*stepRampup;
+          stepSpeedt=400-stepCount/stepRampup;
         } else {
           stepSpeedt = stepSpeed;
         }
-  	  
+        Serial.println(stepSpeedt);
         step(stepSpeedt);
   	    stepCount++;
         //check serial to interupt
@@ -149,6 +151,7 @@ void loop() {
         }
       }
       delay(50);
+      stepper.disableDriver();
       Serial.print("new pos: ");
       Serial.println(totSteps);
   	
@@ -162,7 +165,7 @@ void loop() {
       stepSpeedt=400;
       while (time < dur) {
         if (stepSpeed < 350 && stepSpeedt > stepSpeed){ //ramp-up
-          stepSpeedt=400-stepCount*stepRampup;
+          stepSpeedt=400-stepCount/stepRampup;
           stepCount++;
         } else {
           stepSpeedt = stepSpeed;
@@ -194,7 +197,7 @@ void loop() {
         Serial.println("running continous");
         while (1) {
           if (stepSpeed < 350 && stepSpeedt > stepSpeed){ //ramp-up
-            stepSpeedt=400-stepCount*stepRampup;
+            stepSpeedt=400-stepCount/stepRampup;
             stepCount++;
           } else {
             stepSpeedt = stepSpeed;
@@ -213,8 +216,7 @@ void loop() {
 
 // Sends a pulse on the NXT/STEP pin to tell the driver to take
 // one step, and also delays to control the speed of the motor.
-void step(int speedDelay)
-{
+void step(int speedDelay) {
   // The NXT/STEP minimum high pulse width is 2 microseconds.
   digitalWrite(stepPin, HIGH);
   delayMicroseconds(3);
