@@ -16,26 +16,24 @@ const uint8_t stepPin = 9;  //pulse per step to AMIS
 const uint8_t ss = 10;  //slave select
 
 AMIS30543 stepper;
-int debug = 1;
+int debug = 0;
 
 //these should be global?
 int stepSpeed = 350; //delay in microsec.
 int stepSpeedt = stepSpeed;
-int stepRampup = 4;
-//int stepRampup = (400-stepSpeed)/100;  //FIX: fraction conflicts with int and neg. breaks it
+int stepRampup = 4; //dwells on this many steps before accel to next step speed
 int totSteps = 0;
 int stepCount = 0;
 int runto=0;
 int newcmd=0;
 int runtime=0;
-int steps=0;
+int steps=8;
 boolean setdir, dir, setspd, setrt, setmode, setcont, setpwr;
 unsigned long time, dur;
 
 //Should this be used?
 //enum stepsetting {
-//1,2,4,8,16,32,64,128
-//}  //usage: stepsetting variable = <value>
+//1,2,4,8,16,32,64,128  //}  //usage: stepsetting variable = <value>
 
 void setup() {
   SPI.begin();
@@ -45,14 +43,13 @@ void setup() {
   delay(1);
   
   stepper.resetSettings();
-  stepper.setCurrentMilliamps(1200); //should be adj live
-  stepper.setStepMode(4); //ENUM?
+  stepper.setCurrentMilliamps(2000);
+  stepper.setStepMode(steps); //ENUM?
   stepper.setDirection(1);
   stepper.enableDriver();  //should enable and disable as needed
   
   Serial.begin(9600);
   Serial.println("Hello Teensy 3.1 Serial");
-
   //sysTimer.reset();
 }
 
@@ -65,7 +62,7 @@ void loop() {
     setrt = false;
     setdir = false;
     setmode = false;
-	  setpwr = false;  //ADD BELOW to set motor current with stepper.setCurrentMilliamps()
+	  setpwr = false;
     while (Serial.available()) {
       char c = Serial.read();
       if (c == 'd') { //set direction
@@ -106,7 +103,7 @@ void loop() {
         if (steps > 0 ) {  //TODO: check for valid setting, should this be an ENUM?
           stepper.setStepMode(steps);
         } else {
-          stepper.setStepMode(4); //default
+          stepper.setStepMode(8); //default
         }
       newcmd=5;
     } else if (setcont) {
@@ -127,6 +124,7 @@ void loop() {
   if (newcmd>0) { //skip if no new cmd
     //move number of steps
     if (newcmd==1) { 
+      time = millis();
       Serial.print("moving #steps: ");
       Serial.println(runto);
       stepCount = 0;
@@ -135,13 +133,7 @@ void loop() {
      
       //ramp-up FIX: this should be moved to step fxn, values aren't right
       while (stepCount < totSteps){
-        if (stepSpeed < 350 && stepSpeedt > stepSpeed){ 
-          stepSpeedt=400-stepCount/stepRampup;
-        } else {
-          stepSpeedt = stepSpeed;
-        }
-        Serial.println(stepSpeedt);
-        step(stepSpeedt);
+  	    stepSpeedt = step(stepSpeedt, stepCount);
   	    stepCount++;
         //check serial to interupt
         if (Serial.available()) {
@@ -150,6 +142,13 @@ void loop() {
           break;
         }
       }
+      int dT = millis()-time;
+      float rpm = (60.0*(float)totSteps/(float)(400*steps))/((float)(dT/1000.0));
+      Serial.print("dTime: ");
+      Serial.println(dT);
+      Serial.print("rpm: ");
+      Serial.println(rpm);
+      
       delay(50);
       stepper.disableDriver();
       Serial.print("new pos: ");
@@ -163,14 +162,10 @@ void loop() {
       dur = time + runtime;
       stepCount = 0;
       stepSpeedt=400;
+      stepper.enableDriver();
       while (time < dur) {
-        if (stepSpeed < 350 && stepSpeedt > stepSpeed){ //ramp-up
-          stepSpeedt=400-stepCount/stepRampup;
-          stepCount++;
-        } else {
-          stepSpeedt = stepSpeed;
-        }
-        step(stepSpeedt);
+        stepSpeedt = step(stepSpeedt,stepCount);
+        stepCount++;
         time = millis();
         //check serial to interupt
         if (Serial.available()) {
@@ -179,6 +174,7 @@ void loop() {
           break;
         }
       }
+      stepper.disableDriver();
       Serial.print("Time: ");
       time = millis();
       Serial.println(time);
@@ -195,14 +191,10 @@ void loop() {
         Serial.println(steps);
     } else if (newcmd==6) {
         Serial.println("running continous");
+        stepper.enableDriver();
         while (1) {
-          if (stepSpeed < 350 && stepSpeedt > stepSpeed){ //ramp-up
-            stepSpeedt=400-stepCount/stepRampup;
-            stepCount++;
-          } else {
-            stepSpeedt = stepSpeed;
-          }
-          step(stepSpeedt);
+          stepSpeedt = step(stepSpeedt, stepCount);
+          stepCount++;
           if (Serial.available()) {
             Serial.flush();
             Serial.println("interrupted by serial line");
@@ -210,20 +202,29 @@ void loop() {
             break;
           }
         }
+        stepper.disableDriver();
     }}
   newcmd=0; //resets the serial cmd
 } //end of loop
 
 // Sends a pulse on the NXT/STEP pin to tell the driver to take
 // one step, and also delays to control the speed of the motor.
-void step(int speedDelay) {
+int step(int stepSpeedt, int stepCount) {
   // The NXT/STEP minimum high pulse width is 2 microseconds.
   digitalWrite(stepPin, HIGH);
   delayMicroseconds(3);
   digitalWrite(stepPin, LOW);
 
-  // This delay controls the stepper motor's speed.
-  // increase = stepper motor goes slower, decrease = faster, but
-  // there is a limit to how fast it can go before it starts missing steps.
-  delayMicroseconds(speedDelay);
+  //control the ramp rate
+  if (debug) {Serial.println(stepSpeedt);} //to debug accel
+  if (stepSpeed < 350 && stepSpeedt > stepSpeed){ //FIX: these constants
+    stepSpeedt=400-stepCount/stepRampup;
+  } else {
+    stepSpeedt = stepSpeed;
+  }
+
+  // This delay controls the stepper motor's speed.  increase = stepper motor goes slower,
+  //decrease = faster, but there is a limit to how fast it can go before it starts missing steps.
+  delayMicroseconds(stepSpeedt);
+  return stepSpeedt;
 }
