@@ -84,6 +84,8 @@ void loop(void)
 //    msg.buf[idx] = '0'+idx+1;
 //  }
 
+  stepper.disableDriver();
+  
   if ( CANbus.available() ){
     CANbus.read(rxmsg);
     
@@ -105,6 +107,7 @@ void loop(void)
     }
   }
 
+/*test: uncomment to run the motor back and forth
   int stepSpeed = 250;
   // Step in the default direction
   setDirection(0);
@@ -123,6 +126,7 @@ void loop(void)
   }
   
   delay(300);
+end test*/
 }
 
 // Sends a pulse on the NXT/STEP pin to tell the driver to take
