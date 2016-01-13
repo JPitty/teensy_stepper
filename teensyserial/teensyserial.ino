@@ -1,4 +1,4 @@
-//Ard. 1.0.5, 1.6.5 11/9/15 JP
+//Ard. 1.0.5, 1.6.5 11/19/15 JP
 //This version doesn't use Accel, too many missed steps
 //send an cmd over the serial cnxn, motor should do what it's told.
 //Uses Teensy 3.2 to control an AMIS-30543 stepper motor controller using a Pololu dev board #2970.
@@ -83,7 +83,11 @@ void loop() {
         }}}
     
     if (setspd){
-      stepSpeed = runto;
+      if (runto > 10) {
+        stepSpeed = runto;
+      } else {
+        stepSpeed = 10;
+      }
       newcmd=4;
     } else if (setrt) {
       runtime = runto;

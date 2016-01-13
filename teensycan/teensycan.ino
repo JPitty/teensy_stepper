@@ -12,13 +12,12 @@
 #include <AMIS30543.h>
 
 //Metro sysTimer = Metro(1);// milliseconds
-const uint8_t stepPin = 9;  //pulse per step to AMIS
+const uint8_t stepPin = 9;  //pulse per step pin to AMIS
 const uint8_t ss = 10;  //slave select
 
 AMIS30543 stepper;
 FlexCAN CANbus(500000);
 static CAN_message_t msg,rxmsg;
-//static uint8_t hex[17] = "0123456789abcdef";
 static CAN_filter_t myMask, myFilter_0;
 
 //int txCount,rxCount;
@@ -28,8 +27,8 @@ static CAN_filter_t myMask, myFilter_0;
 const int redPin =  23;
 const int greenPin =  21;
 const int bluePin =  22;
-int i;
-int debug = 1;
+
+int i, debug = 1;
 
 void setup(void)
 {
@@ -38,7 +37,7 @@ void setup(void)
   myMask.ext = 0;
   myMask.id = 0xfff;  //masks everything except exact filter.id
   CANbus.begin(myMask);
-  myFilter_0.id = 0x003; //this should be read from hw: dips, etc
+  myFilter_0.id = 0x003; //this should be read from hw?
   myFilter_0.ext = 0;
   myFilter_0.rtr = 0;
   CANbus.setFilter(myFilter_0,0);
@@ -69,7 +68,7 @@ void setup(void)
   pinMode(greenPin, OUTPUT);
   pinMode(bluePin, OUTPUT);
   analogWrite(redPin, 30);
-  analogWrite(greenPin, 0);
+  analogWrite(greenPin, 10);
   analogWrite(bluePin, 20);
   delay(500);
 
@@ -84,17 +83,24 @@ void loop(void)
 //    msg.buf[idx] = '0'+idx+1;
 //  }
 
-  stepper.disableDriver();
+  stepper.disableDriver(); //only enable when needed
   
-  if ( CANbus.available() ){
+  if ( CANbus.available() ){  //get the msg
     CANbus.read(rxmsg);
-    
-    if (rxmsg.len >= 3) {
-      analogWrite(redPin, rxmsg.buf[0]);
-      analogWrite(bluePin, rxmsg.buf[1]);
-      analogWrite(greenPin, rxmsg.buf[2]);
-    }
 
+    if ( rxmsg.buf[0] == 1 ){  //1=led cmd, must have 3 values after
+      if (rxmsg.len >= 4) {
+        analogWrite(redPin, rxmsg.buf[1]);
+        analogWrite(bluePin, rxmsg.buf[2]);
+        analogWrite(greenPin, rxmsg.buf[3]);
+      }
+    }
+    else if ( rxmsg.buf[0] == 2 ){  //>1=pump cmd, then parse the rest of the packet
+      if (rxmsg.buf[1] == 1) {
+
+      }
+    }
+    
     if ( debug > 0 ) {
       Serial.print("sender id: ");
       Serial.println(rxmsg.id);
