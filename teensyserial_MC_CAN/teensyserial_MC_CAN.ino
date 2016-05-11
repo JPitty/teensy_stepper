@@ -23,7 +23,7 @@ uint8_t Ctrl; //2bit=res/4bit=seq#/2bit=cmd(LSB)
 uint8_t Idx; //8bit
 uint8_t Offset; //8bit
 uint8_t DataW; //8bits
-uint16_t CrcH; //16bits, MSB, 
+uint16_t CrcH; //16bits, MSB,
 //Data Section
 uint8_t DataF; //255word max, LSB  FIX type!
 uint16_t CrcD; //16bits
@@ -68,7 +68,7 @@ void setup() {
   CANbus.setFilter(myFilter_0,5);
   CANbus.setFilter(myFilter_0,6);
   CANbus.setFilter(myFilter_0,7);
-  
+
   /*//Fill array with data
   for (int i=0; i<BUFSIZE; i++) {
     buf[i] = (i+1) & 0xff;
@@ -83,11 +83,6 @@ void setup() {
 void loop() {
   int count = 0;
 
-  //get reply
-  delay(100);
-  while (Ser.available()) {  // receive all bytes into "buf"
-      buf[count++] = Ser.read();
-  }
   //send to USB
   /*if (count > 0){
     Serial.print("recd #bytes: ");
@@ -122,7 +117,7 @@ void loop() {
     else if ( rxmsg.buf[0] == 9 ){ //MC run commands
       //do something;
     }
-        
+
     if ( debug > 0 ) {
       Serial.print("sender id: ");
       Serial.println(rxmsg.id);
@@ -134,13 +129,15 @@ void loop() {
       }
       Serial.println();
     }
-  }
-  //on-board led heartbeat:
+  } // end CAN bus.available
+
+  //on-board led heartbeat (Teensy): TODO: get rid of delays
   digitalWrite(ledPin, HIGH);
-  delay(500);
+  //delay(500);
   digitalWrite(ledPin, LOW);
-  delay(500);
-}
+  //delay(500);
+
+} //end loop
 
 // Writes PWM pins to set led
 void ledWrite(int r, int g, int b){
@@ -154,10 +151,16 @@ buf crcIt(buf){
   return crc;
 }
 
-void sendToMC(sendmsg){
+buf sendToMC(sendmsg){
   //send msg to MC
   Ser.write(sendmsg,sizeof(sendmsg));
   Ser.flush();
   if ( debug > 0 ) { Serial.println("sent bufAt"); }
-}
 
+  //get reply
+  delay(100);
+  while (Ser.available()) {  // receive all bytes into "buf"
+      buf[count++] = Ser.read();
+  }
+  return buf
+}
